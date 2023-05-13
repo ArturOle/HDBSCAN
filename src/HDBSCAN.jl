@@ -4,6 +4,10 @@ using Distributions
 using Plots
 using BenchmarkTools
 using Base.Threads
+using Statistics
+
+include("graphs.jl")
+
 
 """
 Algorithm 1: HDBSCAN* main steps.
@@ -15,13 +19,14 @@ Find the prominent clusters from the hierarchy;
 Calculate the outlier scores;
 """
 function hdbscan(data, mpts=5)
-    precomputed_distances = precompute_distances(data)
+    (core_distances, precomputed_distances) = precompute_distances(data, mpts)
 
     #   1) Compute core distance m_pts for all data objects in data
-    core_distances = compute_core_distances(data, precomputed_distances, mpts)
+    # core_distances = compute_core_distances(data, precomputed_distances, mpts)
     
-
     #   2) Compute an MST of G_m_pts - Mutual Reachability Graph
+    mrg = build_mutual_reachability_graph(data, precomputed_distances)
+
 
     #   3) Extend the MST to obtain MST_ext by adding for each vertex a "self-edge"
     #   with the core distance of corresponding object as weighted
@@ -43,22 +48,47 @@ function hdbscan(data, mpts=5)
 
 end
 
-function precompute_distances(data)
-    distance_matrix = Matrix(undef, length(data[:, 1]), length(data[:, 1]))
+
+function smart_mrg(data, precomp_dist)
+    # mrg = graph()
+end
+
+
+function build_mutual_reachability_graph(data, precomp_dist)
+    # mrg = Graphs.Graph()
+    # display(data)
+    # display(precomp_dist)
+
+    # for i in eachindex(data[1])
+    # end
+end
+
+
+function precompute_distances(data, m_pts)
+    len_data_all_1 = length(data[:, 1])
+    distance_matrix = Matrix(undef, len_data_all_1, len_data_all_1)
+    core_distances = Vector(undef, len_data_all_1)
+    points = Vector{Point}(undef, len_data_all_1)
+    paths = Vector{UndirectedPath}(undef, len_data_all_1-1)
 
     for i in eachindex(data[:, 1])
-        for j in i:length(data[:, 1])
+        
+        for j in i:len_data_all_1
             if i==j
                 distance_matrix[i, j] = 0
             else
                 distance_matrix[i, j] = Euclidian(data[i, :], data[j, :])
                 distance_matrix[j, i] = distance_matrix[i, j]
             end
+
         end
+        core_distances[i] = partialsort(distance_matrix[i, :], m_pts+1)
     end
 
-    return distance_matrix
+    mrg = Graph(points, path)
+    return (core_distances, distance_matrix)
 end
+
 
 function Minkowski(a::Vector, b::Vector, p=2)
     result = 0
@@ -85,7 +115,7 @@ end
 function compute_core_distances(data, precomp_dist, m_pts)
     core_distances = Vector(undef, length(data[:, 1]))
 
-    for index in eachindex(data[:, 1])
+    @threads for index in eachindex(data[:, 1])
         core_distances[index] = partialsort(precomp_dist[index, :], m_pts)
     end
 
@@ -93,7 +123,7 @@ function compute_core_distances(data, precomp_dist, m_pts)
 end
 
 
-function data_gen(nr_of_samples=3000)
+function data_gen(nr_of_samples=300)
     data = Matrix{Int64}(undef, nr_of_samples, 2)
 
     for i=1:floor(Int64, nr_of_samples/3)
@@ -118,6 +148,5 @@ end
 
 data = data_gen()
 # s = scatter(data[:, 1], data[:, 2])
-display(s)
+# display(s)
 hdbscan(data)
-
